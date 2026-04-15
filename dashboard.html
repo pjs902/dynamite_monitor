@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynamite Monitor Viewer</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'JetBrains Mono','Fira Mono',ui-monospace,monospace;
+  background: #f4f4f0;
+  color: #1a1a1a;
+  min-height: 100vh;
+  padding: 28px 32px;
+}
+
+h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; color: #555; text-transform: uppercase; margin-bottom: 3px; }
+.subtitle { font-size: 12px; color: #888; margin-bottom: 24px; }
+
+/* file drop zones */
+.file-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+label.file-drop { display: block; cursor: pointer; }
+input[type=file] { display: none; }
+.drop-zone {
+  border: 1.5px dashed #ccc; border-radius: 8px; padding: 22px;
+  text-align: center; background: #fff; transition: border-color 0.15s, background 0.15s;
+}
+.drop-zone:hover, .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; }
+.drop-zone p   { font-size: 12px; color: #444; margin-bottom: 4px; }
+.drop-zone .hint { font-size: 11px; color: #999; }
+
+/* cards */
+.card {
+  background: #fff; border: 1px solid #e0e0da; border-radius: 8px;
+  padding: 18px 20px; margin-bottom: 14px;
+}
+.card-title {
+  font-size: 11px; font-weight: 600; color: #555;
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px;
+}
+
+/* metric grid */
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.metric  { background: #fff; border: 1px solid #e0e0da; border-radius: 8px; padding: 14px 16px; }
+.metric .mlabel { font-size: 10px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px; }
+.metric .mvalue { font-size: 22px; font-weight: 700; color: #111; }
+.metric .msub   { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+/* model status panel */
+#model-card { display: none; }
+.model-summary { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+.model-summary .ms-item { font-size: 13px; }
+.model-summary .ms-num  { font-size: 20px; font-weight: 700; }
+.model-summary .ms-label{ font-size: 11px; color: #888; margin-top: 1px; }
+.progress-wrap { flex: 1; min-width: 160px; }
+.progress-track { height: 8px; background: #e8e8e4; border-radius: 4px; overflow: hidden; }
+.progress-fill  { height: 100%; background: #16a34a; border-radius: 4px; transition: width 0.4s; }
+.progress-label { font-size: 10px; color: #888; margin-top: 4px; }
+
+/* model table */
+.model-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.model-table th { text-align: left; padding: 5px 8px; color: #999; border-bottom: 1px solid #ebebeb; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+.model-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0ec; vertical-align: middle; }
+.model-table tr:hover td { background: #fafaf7; }
+.stage-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.04em; white-space: nowrap;
+}
+
+/* phase strip */
+#phase-card { display: none; }
+#phase-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+#phase-legend .pl-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #555; }
+#phase-legend .pl-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+#phase-strip { width: 100%; height: 30px; border-radius: 4px; overflow: hidden; background: #f4f4f0; }
+#phase-strip canvas { width: 100%; height: 30px; display: block; }
+
+/* charts */
+.chart-wrap { position: relative; width: 100%; }
+.legend { display: flex; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; }
+.legend-swatch { width: 10px; height: 3px; border-radius: 2px; }
+
+/* log section */
+.log-controls { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-btn {
+  background: #fff; border: 1px solid #ddd; border-radius: 4px;
+  padding: 3px 10px; font-size: 11px; color: #555; cursor: pointer;
+  font-family: inherit; transition: border-color 0.1s, background 0.1s;
+}
+.filter-btn:hover  { border-color: #888; color: #111; }
+.filter-btn.active { border-color: #2563eb; color: #2563eb; background: #eff6ff; }
+.log-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.log-table th { text-align: left; padding: 5px 8px; color: #999; border-bottom: 1px solid #ebebeb; font-weight: 600; font-size: 10px; text-transform: uppercase; }
+.log-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0ec; vertical-align: top; }
+.log-table tr:hover td { background: #fafaf7; }
+.badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+.badge-info  { background: #dbeafe; color: #1d4ed8; }
+.badge-debug { background: #f0f0ec; color: #888; }
+.badge-warn  { background: #fef3c7; color: #92400e; }
+.badge-error { background: #fee2e2; color: #b91c1c; }
+
+/* proc table */
+.proc-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.proc-table th { text-align: left; padding: 5px 8px; color: #999; border-bottom: 1px solid #ebebeb; font-weight: 600; font-size: 10px; text-transform: uppercase; cursor: pointer; user-select: none; }
+.proc-table th:hover { color: #333; }
+.proc-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0ec; font-size: 11px; }
+.proc-table tr:hover td { background: #fafaf7; }
+
+/* tooltip */
+#ann-tooltip {
+  position: fixed; background: #fff; border: 1px solid #e0e0da;
+  border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  padding: 10px 14px; font-size: 11px; color: #333;
+  pointer-events: none; z-index: 1000; min-width: 220px; max-width: 360px; display: none;
+}
+#ann-tooltip .tt-stage { font-weight: 700; margin-bottom: 3px; }
+#ann-tooltip .tt-time  { color: #888; font-size: 10px; margin-bottom: 3px; }
+#ann-tooltip .tt-msg   { color: #666; font-size: 10px; word-break: break-word; }
+#ann-tooltip .tt-div   { border-top: 1px solid #ebebeb; margin: 6px 0 5px; }
+</style>
+</head>
+<body>
+<h2 style="position:absolute;left:-9999px">Dynamite process monitor viewer</h2>
+<h1>dynamite monitor</h1>
+<p class="subtitle">load a .jsonl monitor file + optional log file to visualize resource usage</p>
+
+<div class="file-row">
+  <label class="file-drop" id="jsonl-drop">
+    <input type="file" id="jsonl-input" accept=".jsonl,.json,.txt">
+    <div class="drop-zone" id="jsonl-zone">
+      <p>monitor data (.jsonl)</p>
+      <p class="hint">drag &amp; drop or click — output from dynamite_monitor.py</p>
+    </div>
+  </label>
+  <label class="file-drop" id="log-drop">
+    <input type="file" id="log-input" accept=".log,.txt">
+    <div class="drop-zone" id="log-zone">
+      <p>log file (optional)</p>
+      <p class="hint">drag &amp; drop or click — pipeline stage annotations</p>
+    </div>
+  </label>
+</div>
+
+<!-- resource metrics -->
+<div class="metrics" id="metrics-row" style="display:none;">
+  <div class="metric"><div class="mlabel">peak rss</div><div class="mvalue" id="m-peak-rss">—</div><div class="msub" id="m-peak-time"></div></div>
+  <div class="metric"><div class="mlabel">peak cpu</div><div class="mvalue" id="m-peak-cpu">—</div><div class="msub" id="m-peak-cpu-time"></div></div>
+  <div class="metric"><div class="mlabel">peak sys ram</div><div class="mvalue" id="m-sys-ram">—</div><div class="msub" id="m-sys-ram-sub"></div></div>
+  <div class="metric"><div class="mlabel">samples</div><div class="mvalue" id="m-samples">—</div><div class="msub" id="m-duration"></div></div>
+</div>
+
+<!-- model status (populated from log_summary in JSONL) -->
+<div class="card" id="model-card">
+  <div class="card-title">model progress</div>
+  <div class="model-summary" id="model-summary"></div>
+  <div style="overflow-x:auto">
+    <table class="model-table" id="model-table">
+      <thead><tr><th>model</th><th>stage</th><th>last update</th></tr></thead>
+      <tbody id="model-tbody"></tbody>
+    </table>
+  </div>
+  <p id="model-note" style="font-size:10px;color:#aaa;margin-top:10px;display:none"></p>
+</div>
+
+<!-- pipeline event timeline -->
+<div class="card" id="phase-card">
+  <div class="card-title">pipeline events — hover ticks for details</div>
+  <div id="phase-legend"></div>
+  <div id="phase-strip"><canvas id="phase-canvas"></canvas></div>
+</div>
+
+<!-- charts -->
+<div class="card" id="cpu-card" style="display:none;">
+  <div class="card-title">cpu usage over time</div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#2563eb"></div>user procs cpu %</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#16a34a;opacity:0.7"></div>system cpu %</div>
+  </div>
+  <div class="chart-wrap" style="height:220px;"><canvas id="cpu-chart" role="img" aria-label="CPU usage over time"></canvas></div>
+</div>
+
+<div class="card" id="ram-card" style="display:none;">
+  <div class="card-title">ram usage over time</div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#7c3aed"></div>user procs rss (GB)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#dc2626;opacity:0.6"></div>system ram used (GB)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#ccc;height:8px;border-radius:2px"></div>system ram total</div>
+  </div>
+  <div class="chart-wrap" style="height:220px;"><canvas id="ram-chart" role="img" aria-label="RAM usage in gigabytes over time"></canvas></div>
+</div>
+
+<div class="card" id="procs-card" style="display:none;">
+  <div class="card-title">active process count over time</div>
+  <div class="chart-wrap" style="height:130px;"><canvas id="procs-chart" role="img" aria-label="Number of monitored processes over time"></canvas></div>
+</div>
+
+<!-- pipeline event log -->
+<div class="card" id="log-section" style="display:none;">
+  <div class="card-title">pipeline events</div>
+  <div class="log-controls" id="log-controls"></div>
+  <div style="overflow-x:auto;">
+    <table class="log-table">
+      <thead><tr><th>timestamp</th><th>stage</th><th>level</th><th>detail</th></tr></thead>
+      <tbody id="log-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- process snapshot -->
+<div class="card" id="proc-detail-card" style="display:none;">
+  <div class="card-title">process snapshot (latest sample)</div>
+  <div style="overflow-x:auto;">
+    <table class="proc-table">
+      <thead><tr>
+        <th onclick="sortProcs('pid')">pid</th>
+        <th onclick="sortProcs('name')">name</th>
+        <th onclick="sortProcs('cpu_pct')">cpu %</th>
+        <th onclick="sortProcs('rss_gb')">rss GB</th>
+        <th onclick="sortProcs('threads')">thr</th>
+        <th>command</th>
+      </tr></thead>
+      <tbody id="proc-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="ann-tooltip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── state ─────────────────────────────────────────────────────────────────────
+let monitorData = [];
+let logEvents   = [];
+let stageEvents = [];
+let cpuChart, ramChart, procsChart;
+
+// ── stage definitions ─────────────────────────────────────────────────────────
+// Colors for light background
+const STAGE_RULES = [
+  { pattern: /Config file .+ read/,                                     stage: 'config',      short: 'config read',     color: '#6b7280' },
+  { pattern: /System assembled/,                                        stage: 'config',      short: 'system assembled',color: '#6b7280' },
+  { pattern: /Configuration validated/,                                 stage: 'config',      short: 'config validated',color: '#6b7280' },
+  { pattern: /GridWalk added \d+ new model/,                            stage: 'parspace',    short: 'models generated',color: '#d97706',
+    extract: m => m[0] },
+  { pattern: /LegacyGridSearch added \d+ new model/,                   stage: 'parspace',    short: 'models generated',color: '#d97706',
+    extract: m => m[0] },
+  { pattern: /running get_orblib get_weights for model (\d+) out of (\d+)/, stage: 'model_start', short: 'model start', color: '#ca8a04',
+    extract: m => `model ${m[1]} / ${m[2]} in this iteration` },
+  { pattern: /Calculating initial conditions for (.+)/,                 stage: 'orb_ics',     short: 'calc ICs',        color: '#2563eb',
+    extract: m => `ICs: ${m[1].split('/').slice(-2).join('/')}` },
+  { pattern: /done - cmd_orb_start exit code 0/,                       stage: 'orb_ics',     short: 'ICs done',        color: '#2563eb' },
+  { pattern: /Integrating orbit library tube and box orbits for (.+)/,  stage: 'orb_par',     short: 'tube+box orbits', color: '#0891b2',
+    extract: m => `tube+box: ${m[1].split('/').slice(-2).join('/')}` },
+  { pattern: /Integrating orbit library tube orbits for (.+)/,         stage: 'orb_tube',    short: 'tube orbits',     color: '#059669',
+    extract: m => `tube: ${m[1].split('/').slice(-2).join('/')}` },
+  { pattern: /done - cmd_tube_orbs exit code 0/,                       stage: 'orb_tube',    short: 'tube done',       color: '#059669' },
+  { pattern: /Integrating orbit library box orbits for (.+)/,          stage: 'orb_box',     short: 'box orbits',      color: '#16a34a',
+    extract: m => `box: ${m[1].split('/').slice(-2).join('/')}` },
+  { pattern: /done - cmd_box_orbs exit code 0/,                        stage: 'orb_box',     short: 'box done',        color: '#16a34a' },
+  { pattern: /Using WeightSolver: NNLS/,                               stage: 'nnls',        short: 'NNLS start',      color: '#7c3aed' },
+  { pattern: /NNLS solution read from existing output/,                stage: 'nnls',        short: 'NNLS cached',     color: '#7c3aed' },
+  { pattern: /NNLS problem solved and chi2 calculated for model (.+)/, stage: 'nnls',        short: 'NNLS done',       color: '#7c3aed',
+    extract: m => `NNLS done: ${m[1].split('/').slice(-2).join('/')}` },
+  { pattern: /Iteration done, (\d+) model\(s\) calculated/,            stage: 'iter_done',   short: 'iteration done',  color: '#dc2626',
+    extract: m => `${m[1]} models in this iteration` },
+  { pattern: /kinchi2 vs\. model id plot created/,                     stage: 'plotting',    short: 'chi2 plot',       color: '#9ca3af' },
+  { pattern: /Kinematic map written to/,                               stage: 'plotting',    short: 'kin map',         color: '#9ca3af' },
+  { pattern: /.*/,  _levelOnly: ['WARNING','ERROR','CRITICAL'],         stage: 'warning',     short: 'warning',         color: '#dc2626' },
+];
+
+const STAGE_LABEL = {
+  config: 'config', parspace: 'param space', model_start: 'model start',
+  orb_ics: 'orbit ICs', orb_tube: 'tube orbits', orb_box: 'box orbits',
+  orb_par: 'tube+box orbits', nnls: 'NNLS weights', iter_done: 'iteration done',
+  plotting: 'plotting', warning: 'warning/error',
+};
+
+// Stage colours for the model status table pills (light bg, dark text)
+const STAGE_PILL = {
+  queued:   { bg: '#f0f0ec', fg: '#666' },
+  orb_ics:  { bg: '#dbeafe', fg: '#1d4ed8' },
+  orb_tube: { bg: '#d1fae5', fg: '#065f46' },
+  orb_box:  { bg: '#d1fae5', fg: '#065f46' },
+  orb_par:  { bg: '#cffafe', fg: '#0e7490' },
+  nnls:     { bg: '#ede9fe', fg: '#5b21b6' },
+  done:     { bg: '#dcfce7', fg: '#14532d' },
+  failed:   { bg: '#fee2e2', fg: '#991b1b' },
+};
+
+const STAGE_PILL_LABEL = {
+  queued: 'queued', orb_ics: 'calc ICs', orb_tube: 'tube orbits',
+  orb_box: 'box orbits', orb_par: 'integrating', nnls: 'NNLS',
+  done: 'done', failed: 'FAILED',
+};
+
+const STAGE_COLOR = {};
+STAGE_RULES.forEach(r => { if (r.stage) STAGE_COLOR[r.stage] = r.color; });
+
+function classifyLine(e) {
+  for (const rule of STAGE_RULES) {
+    if (rule._levelOnly && !rule._levelOnly.includes(e.level)) continue;
+    const m = e.msg.match(rule.pattern);
+    if (m) {
+      const detail = rule.extract ? rule.extract(m) : e.msg.slice(0, 100);
+      return { stage: rule.stage, short: rule.short, color: rule.color, detail };
+    }
+  }
+  return null;
+}
+
+// ── log parsing ───────────────────────────────────────────────────────────────
+const LOG_RE = /\[(DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL)\]\s+(\w{3}\s+\d+\s+[\d:]+)\s+-\s+([\w.]+(?:\.[\w.]+)*)\s+-[^-]+-\s+(.*)/;
+const ALT_RE = /^(\d{4}-\d{2}-\d{2}[T ][\d:.]+)\s+\[(DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL)\]\s+(.+)$/i;
+
+function parseMonthDay(s) { return new Date(`${s} ${new Date().getFullYear()}`); }
+
+function parseLogs(text) {
+  return text.split('\n').filter(l => l.trim()).map(line => {
+    let m = line.match(LOG_RE);
+    if (m) return { raw: line, level: m[1], ts_str: m[2], ts: parseMonthDay(m[2]), module: m[3], msg: m[4].trim() };
+    m = line.match(ALT_RE);
+    if (m) return { raw: line, level: m[2], ts_str: m[1], ts: new Date(m[1]), module: '', msg: m[3].trim() };
+    return null;
+  }).filter(Boolean);
+}
+
+// ── file drop setup ───────────────────────────────────────────────────────────
+function setupDropZone(zoneId, inputId, onFile) {
+  const zone = document.getElementById(zoneId);
+  const inp  = document.getElementById(inputId);
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0]; if (f) onFile(f);
+  });
+  inp.addEventListener('change', () => { if (inp.files[0]) onFile(inp.files[0]); });
+}
+
+function readFile(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsText(f);
+  });
+}
+
+setupDropZone('jsonl-zone', 'jsonl-input', async f => {
+  const text = await readFile(f);
+  document.getElementById('jsonl-zone').innerHTML = `<p style="color:#16a34a">${f.name}</p><p class="hint">loaded — ${text.trim().split('\n').length} samples</p>`;
+  monitorData = text.trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  render();
+});
+
+setupDropZone('log-zone', 'log-input', async f => {
+  const text = await readFile(f);
+  document.getElementById('log-zone').innerHTML = `<p style="color:#16a34a">${f.name}</p><p class="hint">loaded</p>`;
+  logEvents   = parseLogs(text);
+  stageEvents = logEvents.map(e => { const c = classifyLine(e); return c ? { ...e, ...c } : null; }).filter(Boolean);
+  renderLogs();
+  renderPhaseStrip();
+  if (monitorData.length) renderCharts();
+});
+
+document.getElementById('jsonl-zone').addEventListener('click', () => document.getElementById('jsonl-input').click());
+document.getElementById('log-zone').addEventListener('click',  () => document.getElementById('log-input').click());
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function fmt(v, dec=2) { return typeof v === 'number' ? v.toFixed(dec) : v; }
+function fmtTS(ts) { return ts ? ts.slice(11,19) : ''; }
+
+// ── metrics ───────────────────────────────────────────────────────────────────
+function render() {
+  if (!monitorData.length) return;
+  const peak    = monitorData.reduce((a,b) => a.total_rss_gb  > b.total_rss_gb  ? a : b);
+  const peakCpu = monitorData.reduce((a,b) => a.total_cpu_pct > b.total_cpu_pct ? a : b);
+  const peakSys = monitorData.reduce((a,b) => a.sys_ram_used_gb > b.sys_ram_used_gb ? a : b);
+
+  document.getElementById('m-peak-rss').textContent      = fmt(peak.total_rss_gb) + ' GB';
+  document.getElementById('m-peak-time').textContent     = 'at ' + fmtTS(peak.ts);
+  document.getElementById('m-peak-cpu').textContent      = fmt(peakCpu.total_cpu_pct) + ' %';
+  document.getElementById('m-peak-cpu-time').textContent = 'at ' + fmtTS(peakCpu.ts);
+  document.getElementById('m-sys-ram').textContent       = fmt(peakSys.sys_ram_used_gb) + ' GB';
+  document.getElementById('m-sys-ram-sub').textContent   = 'of ' + fmt(peakSys.sys_ram_total_gb) + ' GB total';
+  document.getElementById('m-samples').textContent       = monitorData.length;
+  const dur = (new Date(monitorData.at(-1).ts) - new Date(monitorData[0].ts)) / 60000;
+  document.getElementById('m-duration').textContent      = fmt(dur,1) + ' min';
+  document.getElementById('metrics-row').style.display   = 'grid';
+
+  renderModelStatus();
+  renderCharts();
+  renderProcDetail();
+}
+
+// ── model status (from log_summary embedded in JSONL) ─────────────────────────
+// The monitor embeds a log_summary in each JSONL record when it has log watcher
+// data. We use the LAST record that has log_summary.
+//
+// Progress display is deliberately honest:
+//   "N done / M announced in current run"
+// We never say "M total" because dynamite's GridWalk/LegacyGridSearch adds new
+// iterations until convergence — future iterations aren't announced yet.
+function renderModelStatus() {
+  // Find latest record with log_summary
+  let summary = null;
+  for (let i = monitorData.length - 1; i >= 0; i--) {
+    if (monitorData[i].log_summary) { summary = monitorData[i].log_summary; break; }
+  }
+  if (!summary || !summary.n_total) return;
+
+  const card = document.getElementById('model-card');
+  card.style.display = 'block';
+
+  const { n_done, n_total, n_active, models } = summary;
+  const pct = n_total ? (n_done / n_total * 100) : 0;
+
+  document.getElementById('model-summary').innerHTML = `
+    <div class="ms-item">
+      <div class="ms-num" style="color:#16a34a">${n_done}</div>
+      <div class="ms-label">done</div>
+    </div>
+    <div class="ms-item">
+      <div class="ms-num" style="color:#2563eb">${n_active}</div>
+      <div class="ms-label">active</div>
+    </div>
+    <div class="ms-item">
+      <div class="ms-num" style="color:#666">${n_total}</div>
+      <div class="ms-label">announced</div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="progress-label">${pct.toFixed(0)}% of announced models done — more iterations may follow</div>
+    </div>`;
+
+  // Sort: active first (by stage order), then done
+  const stageOrder = ['orb_ics','orb_par','orb_tube','orb_box','nnls','queued','done','failed'];
+  const entries = Object.entries(models).sort((a, b) => {
+    const ai = stageOrder.indexOf(a[1].stage);
+    const bi = stageOrder.indexOf(b[1].stage);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  const MAX_DONE_SHOWN = 5;
+  const active  = entries.filter(([,v]) => v.stage !== 'done');
+  const done    = entries.filter(([,v]) => v.stage === 'done');
+  const rows    = [...active, ...done.slice(0, MAX_DONE_SHOWN)];
+
+  document.getElementById('model-tbody').innerHTML = rows.map(([key, info]) => {
+    const pill = STAGE_PILL[info.stage] || { bg: '#f0f0ec', fg: '#444' };
+    const lbl  = STAGE_PILL_LABEL[info.stage] || info.stage;
+    return `<tr>
+      <td style="font-family:monospace;color:#333">${key}</td>
+      <td><span class="stage-pill" style="background:${pill.bg};color:${pill.fg}">${lbl}</span></td>
+      <td style="color:#aaa">${info.ts || ''}</td>
+    </tr>`;
+  }).join('');
+
+  const noteEl = document.getElementById('model-note');
+  if (done.length > MAX_DONE_SHOWN) {
+    noteEl.textContent = `+ ${done.length - MAX_DONE_SHOWN} more completed models not shown`;
+    noteEl.style.display = 'block';
+  } else {
+    noteEl.style.display = 'none';
+  }
+}
+
+// ── annotation helpers ────────────────────────────────────────────────────────
+function getStagedAnnotations() {
+  if (!stageEvents.length || !monitorData.length) return [];
+  const t0 = new Date(monitorData[0].ts).getTime();
+  const t1 = new Date(monitorData.at(-1).ts).getTime();
+  const span = t1 - t0 || 1;
+  return stageEvents.map(e => ({
+    frac: (e.ts.getTime() - t0) / span,
+    stage: e.stage, short: e.short, color: e.color, detail: e.detail, ts_str: e.ts_str, level: e.level,
+  })).filter(a => a.frac >= -0.02 && a.frac <= 1.02);
+}
+
+// ── phase strip ───────────────────────────────────────────────────────────────
+function renderPhaseStrip() {
+  if (!stageEvents.length) return;
+  const ann = getStagedAnnotations();
+  if (!ann.length && !monitorData.length) return;
+  document.getElementById('phase-card').style.display = 'block';
+
+  const seen = new Set();
+  const legendEl = document.getElementById('phase-legend');
+  legendEl.innerHTML = '';
+  ann.forEach(e => {
+    if (seen.has(e.stage)) return; seen.add(e.stage);
+    legendEl.innerHTML += `<div class="pl-item"><div class="pl-swatch" style="background:${e.color}"></div><span>${STAGE_LABEL[e.stage] || e.stage}</span></div>`;
+  });
+
+  const canvas = document.getElementById('phase-canvas');
+  const W = canvas.offsetWidth || 800;
+  canvas.width = W; canvas.height = 30;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f4f4f0'; ctx.fillRect(0, 0, W, 30);
+  ctx.fillStyle = '#e8e8e2'; ctx.fillRect(0, 14, W, 2); // baseline
+
+  const sorted = [...ann].sort((a,b) => a.frac - b.frac);
+  sorted.forEach(a => {
+    const x = Math.round(a.frac * W);
+    ctx.fillStyle = a.color + 'cc'; ctx.fillRect(x, 4, 1, 22);
+    ctx.fillStyle = a.color;        ctx.fillRect(x-1, 3, 3, 3); // diamond cap
+  });
+
+  const SNAP_PX = 8;
+  canvas.onmousemove = ev => {
+    const rect = canvas.getBoundingClientRect();
+    const px   = ev.clientX - rect.left;
+    const near = sorted.filter(a => Math.abs(a.frac * W - px) <= SNAP_PX);
+    if (!near.length) { hideTooltip(); return; }
+    showTooltipMulti(ev.clientX, ev.clientY, near);
+  };
+  canvas.onmouseleave = hideTooltip;
+}
+
+// ── tooltip ───────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('ann-tooltip');
+
+function showTooltipMulti(cx, cy, events) {
+  tooltip.innerHTML = events.map((a, i) =>
+    `${i > 0 ? '<div class="tt-div"></div>' : ''}
+     <div class="tt-stage" style="color:${a.color}">${STAGE_LABEL[a.stage] || a.stage} — ${a.short}</div>
+     <div class="tt-time">${a.ts_str}</div>
+     <div class="tt-msg">${a.detail}</div>`
+  ).join('');
+  tooltip.style.display = 'block';
+  tooltip.style.left = Math.min(cx + 14, window.innerWidth  - 380) + 'px';
+  tooltip.style.top  = Math.min(cy + 14, window.innerHeight - 160) + 'px';
+}
+function showTooltip(cx, cy, a) { showTooltipMulti(cx, cy, [a]); }
+function hideTooltip() { tooltip.style.display = 'none'; }
+
+// ── chart annotation plugin ───────────────────────────────────────────────────
+function makeAnnotationPlugin(annotations) {
+  return {
+    id: 'stageAnnotations',
+    afterDraw(chart) {
+      const { ctx, chartArea: ca } = chart;
+      if (!ca) return;
+      const drawn = new Set();
+      annotations.forEach(a => {
+        const bucket = Math.round(a.frac * 200);
+        if (drawn.has(bucket)) return; drawn.add(bucket);
+        const x = ca.left + a.frac * (ca.right - ca.left);
+        ctx.save();
+        ctx.strokeStyle = a.color + 'bb';
+        ctx.lineWidth = a.level === 'WARNING' || a.level === 'ERROR' ? 1.5 : 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath(); ctx.moveTo(x, ca.top); ctx.lineTo(x, ca.bottom); ctx.stroke();
+        ctx.restore();
+      });
+    }
+  };
+}
+
+function addChartHover(canvas, annotations, chartRef) {
+  const SNAP_PX = 6;
+  canvas.addEventListener('mousemove', ev => {
+    const chart = chartRef();
+    if (!chart || !chart.chartArea) { hideTooltip(); return; }
+    const rect = canvas.getBoundingClientRect();
+    const px   = ev.clientX - rect.left;
+    const ca   = chart.chartArea;
+    if (px < ca.left || px > ca.right) { hideTooltip(); return; }
+    const near = annotations.filter(a => Math.abs(a.frac * (ca.right - ca.left) + ca.left - px) <= SNAP_PX);
+    if (!near.length) { hideTooltip(); return; }
+    showTooltipMulti(ev.clientX, ev.clientY, near);
+  });
+  canvas.addEventListener('mouseleave', hideTooltip);
+}
+
+// ── charts ────────────────────────────────────────────────────────────────────
+function renderCharts() {
+  const labels      = monitorData.map(d => fmtTS(d.ts));
+  const annotations = getStagedAnnotations();
+  const annPlugin   = makeAnnotationPlugin(annotations);
+
+  const gridColor = 'rgba(0,0,0,0.06)';
+  const tickColor = '#999';
+  const baseOpts  = {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false }, tooltip: {
+      enabled: true, backgroundColor: '#fff', borderColor: '#e0e0da',
+      borderWidth: 1, titleColor: '#666', bodyColor: '#111', padding: 10,
+    }},
+    scales: {
+      x: { ticks: { color: tickColor, maxTicksLimit: 12, font: { size: 10 } }, grid: { color: gridColor } },
+      y: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: gridColor } }
+    }
+  };
+
+  if (cpuChart)   cpuChart.destroy();
+  if (ramChart)   ramChart.destroy();
+  if (procsChart) procsChart.destroy();
+
+  document.getElementById('cpu-card').style.display   = 'block';
+  document.getElementById('ram-card').style.display   = 'block';
+  document.getElementById('procs-card').style.display = 'block';
+
+  const cpuCanvas = document.getElementById('cpu-chart');
+  cpuChart = new Chart(cpuCanvas, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'user cpu %',   data: monitorData.map(d => +d.total_cpu_pct.toFixed(1)),
+        borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.06)',
+        borderWidth: 1.5, fill: true, tension: 0.3, pointRadius: 0 },
+      { label: 'system cpu %', data: monitorData.map(d => +d.sys_cpu_pct.toFixed(1)),
+        borderColor: 'rgba(22,163,74,0.7)', backgroundColor: 'transparent',
+        borderWidth: 1, borderDash: [5,4], fill: false, tension: 0.3, pointRadius: 0 }
+    ]},
+    plugins: [annPlugin],
+    options: { ...baseOpts, scales: { ...baseOpts.scales,
+      y: { ...baseOpts.scales.y, title: { display: true, text: 'cpu %', color: tickColor, font: { size: 10 } } }}}
+  });
+  addChartHover(cpuCanvas, annotations, () => cpuChart);
+
+  const ramCanvas = document.getElementById('ram-chart');
+  ramChart = new Chart(ramCanvas, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'user rss GB',  data: monitorData.map(d => +d.total_rss_gb.toFixed(3)),
+        borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,0.07)',
+        borderWidth: 1.5, fill: true, tension: 0.3, pointRadius: 0 },
+      { label: 'sys used GB',  data: monitorData.map(d => +d.sys_ram_used_gb.toFixed(2)),
+        borderColor: 'rgba(220,38,38,0.6)', backgroundColor: 'transparent',
+        borderWidth: 1, borderDash: [5,4], fill: false, tension: 0.3, pointRadius: 0 },
+      { label: 'sys total GB', data: monitorData.map(d => +d.sys_ram_total_gb.toFixed(0)),
+        borderColor: 'rgba(0,0,0,0.15)', backgroundColor: 'rgba(0,0,0,0.02)',
+        borderWidth: 1, borderDash: [2,6], fill: true, tension: 0, pointRadius: 0 }
+    ]},
+    plugins: [annPlugin],
+    options: { ...baseOpts, scales: { ...baseOpts.scales,
+      y: { ...baseOpts.scales.y, title: { display: true, text: 'GB', color: tickColor, font: { size: 10 } } }}}
+  });
+  addChartHover(ramCanvas, annotations, () => ramChart);
+
+  procsChart = new Chart(document.getElementById('procs-chart'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'process count', data: monitorData.map(d => d.n_procs),
+        borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,0.07)',
+        borderWidth: 1.5, fill: true, tension: 0, pointRadius: 0 }
+    ]},
+    plugins: [annPlugin],
+    options: { ...baseOpts, scales: { ...baseOpts.scales,
+      y: { ...baseOpts.scales.y, ticks: { ...baseOpts.scales.y.ticks, stepSize: 1 },
+           title: { display: true, text: 'n procs', color: tickColor, font: { size: 10 } } }}}
+  });
+}
+
+// ── log table ─────────────────────────────────────────────────────────────────
+function levelBadge(level) {
+  const cls = level === 'INFO' ? 'badge-info' : level === 'DEBUG' ? 'badge-debug' :
+    (level === 'WARNING' || level === 'WARN') ? 'badge-warn' : 'badge-error';
+  return `<span class="badge ${cls}">${level}</span>`;
+}
+
+function renderLogs() {
+  if (!stageEvents.length) return;
+  document.getElementById('log-section').style.display = 'block';
+
+  const stages   = [...new Set(stageEvents.map(e => e.stage))];
+  const controls = document.getElementById('log-controls');
+  controls.innerHTML = '';
+  let active = new Set(stages);
+
+  const allBtn = document.createElement('button');
+  allBtn.className = 'filter-btn active'; allBtn.textContent = 'all';
+  allBtn.onclick = () => { active = new Set(stages); renderRows(); updateBtns(); };
+  controls.appendChild(allBtn);
+
+  stages.forEach(st => {
+    const b = document.createElement('button');
+    b.className = 'filter-btn'; b.textContent = STAGE_LABEL[st] || st; b.dataset.st = st;
+    b.onclick = () => {
+      if (active.has(st) && active.size === stages.length) active = new Set([st]);
+      else if (active.has(st)) active.delete(st);
+      else active.add(st);
+      if (!active.size) active = new Set(stages);
+      renderRows(); updateBtns();
+    };
+    controls.appendChild(b);
+  });
+
+  function updateBtns() {
+    allBtn.className = 'filter-btn' + (active.size === stages.length ? ' active' : '');
+    controls.querySelectorAll('[data-st]').forEach(b => {
+      b.className = 'filter-btn' + (active.has(b.dataset.st) ? ' active' : '');
+    });
+  }
+
+  function renderRows() {
+    const tbody    = document.getElementById('log-tbody');
+    const filtered = stageEvents.filter(e => active.has(e.stage));
+    const color = e => STAGE_COLOR[e.stage] || '#666';
+    tbody.innerHTML = filtered.slice(0, 1000).map(e =>
+      `<tr>
+        <td style="white-space:nowrap;color:#888;font-size:10px">${e.ts_str}</td>
+        <td><span style="font-size:10px;font-weight:600;color:${color(e)}">${STAGE_LABEL[e.stage]||e.stage}</span></td>
+        <td>${levelBadge(e.level)}</td>
+        <td style="color:#555;font-size:10px;max-width:500px">${e.detail}</td>
+      </tr>`
+    ).join('');
+    if (filtered.length > 1000)
+      tbody.innerHTML += `<tr><td colspan="4" style="color:#aaa;text-align:center;padding:8px">... ${filtered.length-1000} more</td></tr>`;
+  }
+  renderRows();
+}
+
+// ── process detail ────────────────────────────────────────────────────────────
+let lastProcSort = { key: 'cpu_pct', dir: -1 };
+function sortProcs(key) {
+  if (lastProcSort.key === key) lastProcSort.dir *= -1; else { lastProcSort.key = key; lastProcSort.dir = -1; }
+  renderProcDetail();
+}
+
+function renderProcDetail() {
+  if (!monitorData.length) return;
+  const last = monitorData.at(-1);
+  if (!last.processes || !last.processes.length) return;
+  document.getElementById('proc-detail-card').style.display = 'block';
+  const procs = [...last.processes].sort((a,b) => {
+    const av = a[lastProcSort.key] ?? 0, bv = b[lastProcSort.key] ?? 0;
+    return lastProcSort.dir * (typeof av === 'number' ? av-bv : String(av).localeCompare(String(bv)));
+  });
+  const cpuColor = c => c > 200 ? '#dc2626' : c > 50 ? '#d97706' : '#333';
+  const ramColor = r => r > 100 ? '#dc2626' : r > 20 ? '#d97706' : '#333';
+  document.getElementById('proc-tbody').innerHTML = procs.map(p =>
+    `<tr>
+      <td style="color:#999">${p.pid}</td>
+      <td style="color:#2563eb;font-weight:600">${p.name}</td>
+      <td style="color:${cpuColor(p.cpu_pct)}">${p.cpu_pct.toFixed(1)}</td>
+      <td style="color:${ramColor(p.rss_gb)}">${p.rss_gb.toFixed(4)}</td>
+      <td style="color:#666">${p.threads}</td>
+      <td style="color:#aaa;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.cmd}</td>
+    </tr>`
+  ).join('');
+}
+</script>
+</body>
+</html>
