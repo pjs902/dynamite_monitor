@@ -7,7 +7,7 @@ Two files, no dependencies beyond what a dynamite environment already has:
 | File | Purpose |
 |---|---|
 | `dynamite_monitor.py` | Runs on the cluster alongside dynamite. Records CPU/RAM per process and tracks pipeline stage from the log file. |
-| `dynamite_viewer.html` | Standalone browser app. Drop in the `.jsonl` output and optionally the dynamite log to get annotated timeseries charts and a model status table. |
+| `dashboard.html` | Standalone browser app. Drop in the `.jsonl` output and optionally the dynamite log to get annotated timeseries charts and a model status table. |
 
 ---
 
@@ -33,10 +33,18 @@ The monitor will auto-stop 150 s after the last Python process owned by your use
 
 ### In the browser
 
-Open `dynamite_viewer.html` locally — no server required, everything runs in the page.
+Open `dashboard.html` locally — no server required, everything runs in the page.
 
 1. Drop `run_001.jsonl` onto the left zone → resource charts appear
 2. Drop `dynamite.log` onto the right zone → pipeline stage annotations and model status table appear
+
+### Hosted dashboard (GitHub Pages)
+
+The repository includes a GitHub Actions workflow that deploys `dashboard.html` to GitHub Pages on every push to `main`.
+
+Once Pages is enabled in repository settings (Build and deployment: **GitHub Actions**), the dashboard will be available at:
+
+`https://pjs902.github.io/dynamite_monitor/`
 
 ---
 
@@ -160,7 +168,7 @@ Each line is a JSON object:
 
 ## Viewer
 
-`dynamite_viewer.html` is a single self-contained HTML file with no build step and no server requirement. Open it in any modern browser.
+`dashboard.html` is a single self-contained HTML file with no build step and no server requirement. Open it in any modern browser.
 
 ### What it shows
 
